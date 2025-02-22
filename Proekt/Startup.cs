@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Proekt.Helpers;
+using Serilog;
 
 namespace Proekt
 {
@@ -17,6 +18,7 @@ namespace Proekt
         public Startup(IConfiguration configuration)
         {
             Configuration = configuration;
+            
         }
         public void ConfigureServices(IServiceCollection services)
         {
@@ -43,7 +45,11 @@ namespace Proekt
     };
 });
 
-
+            services.AddLogging(loggingBuilder =>
+            {
+                loggingBuilder.ClearProviders(); // Убираем стандартные логгеры
+                loggingBuilder.AddSerilog(); // Добавляем Serilog
+            });
 
             // Добавление авторизации
             services.AddAuthorization();
@@ -103,6 +109,7 @@ namespace Proekt
         // Настройка middleware
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
         {
+
             if (env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();
@@ -115,7 +122,20 @@ namespace Proekt
                 c.SwaggerEndpoint("/swagger/v1/swagger.json", "Proekt API v1");
                 c.RoutePrefix = string.Empty; // Доступ к Swagger UI по корневому URL
             });
-
+            app.UseExceptionHandler(errorApp =>
+            {
+                errorApp.Run(async context =>
+                {
+                    var exception = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
+                    if (exception != null)
+                    {
+                        Log.Error(exception, "Произошла ошибка: {Message}", exception.Message);
+                    }
+                    context.Response.StatusCode = 500;
+                    await context.Response.WriteAsync("Произошла внутренняя ошибка сервера.");
+                });
+            });
+            app.UseSerilogRequestLogging();
             app.UseRouting();
             app.UseAuthentication();
             app.UseAuthorization();
